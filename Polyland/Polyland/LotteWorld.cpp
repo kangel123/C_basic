@@ -1,6 +1,9 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <time.h>
+#include <stdbool.h>
+#include <string.h>
+#include <ctype.h>
 
 // 권종별 가격
 const int LESS_BABY_PRICE = 0, GREATER_BABY_PRICE = 15000,
@@ -35,33 +38,123 @@ PREGNANT_DISCOUNT_RATE = 0.7;
 const int MAX_COUNT = 100, MIN_COUNT = 1;
 
 
+// 입력
+bool inputData(int* ticketSelect, long long int* customerIDNumber, int* orderCount, int* discountSelect);	// inputTicketSelect, inputCustomerIDNumber, inputOrderCount, inputDiscountSelect 함수 포함
+int inputTicketSelect();
+long long int inputCustomerIDNumber();
+int inputOrderCount();
+int inputDiscountSelect();
+int inputOrderContinue();
+int inputExitSelect();
+
+// 계산 및 에러 확인 작업
+int calcPriceAll(long long int customerIDNumber, int ticketSelect, int discountSelect, int orderCount, int priceResult, int* age);	// calcAge(calAgeGroup), calcPriceProcess, calcDiscount, calcPriceResult 함수 포함
+int calcAge(long long int customerIDNumber);
+int calAgeGroup(int age);
+int calcPriceProcess(int age, int ticketSelect);
+int calcDiscount(int calcPrice, int discountSelect);
+int calcPriceResult(int calcPrice, int orderCount);
+void flushInputBuffer();	// 필요없는 문자 제거
+bool checkCustomerIDNumber(long long int customerIDNumber);	// 주민등록번호 확인
+
+// 저장
+bool saveOrderList(int ticketSelect, int age, int orderCount, int priceResult, int discountSelect, int* position, int(*orderList)[5]);	// 리스트
+bool saveOrderIntoFile(int totalPrice, int* position, int(*orderList)[5], int* filePosition);	// 파일
+
+// 출력
+bool printPrice(int priceResult);
+bool printOrder(int totalPrice, int* position, int(*orderList)[5]);
+void printErrorMessage();	// 에러 메시지
+
+int main() {
+	int totalPrice = 0;
+	int position = 0;
+	int filePosition = 0;
+	int reportPosition = 0;
+	int orderList[100][5] = { 0 };
+	int isExit = 0;
+	bool error;
+
+	do {
+		while (1) {
+			int ticketSelect, orderCount, discountSelect, age, price = 0, continueSelect;
+			long long int customerIDNumber;
+
+			error = inputData(&ticketSelect, &customerIDNumber, &orderCount, &discountSelect);
+			price = calcPriceAll(customerIDNumber, ticketSelect, discountSelect, orderCount, price, &age);
+			totalPrice += price;
+			
+			error = saveOrderList(ticketSelect, age, orderCount, price, discountSelect, &position, orderList);
+			error = saveOrderIntoFile(totalPrice, &position, orderList, &filePosition);
+
+			error = printPrice(price);
+
+			continueSelect = inputOrderContinue();
+			if (continueSelect == 2) { break; }
+		}
+		error = printOrder(totalPrice, &position, orderList);
+		if (!error) { printErrorMessage(); break; }
+
+		isExit = inputExitSelect();
+
+		position = 0;
+		totalPrice = 0;
+	} while (isExit == 1);
+
+	return 0;
+}
+
+
+bool inputData(int* ticketSelect, long long int* customerIDNumber, int* orderCount, int* discountSelect) {
+	*ticketSelect = inputTicketSelect();
+	*customerIDNumber = inputCustomerIDNumber();
+	*orderCount = inputOrderCount();
+	*discountSelect = inputDiscountSelect();
+
+	return true;
+}
+
 int inputTicketSelect() {
 	int ticket;
+
 	do {
 		printf("권종을 선택하세요.\n");
 		printf("1. 주간권\n");
 		printf("2. 야간권\n");
+
 		scanf("%d", &ticket);
+
+		flushInputBuffer();
 	} while (ticket < 1 || ticket >2);
+
 	return ticket;
 }
 
 long long int inputCustomerIDNumber() {
 	long long int  customerIDNumber;
-	// 성별부분 확인부분 나중에 추가!!!
+	bool IDCheck;
+
 	do {
 		printf("주민번호를 입력하세요.\n");
+
 		scanf("%lld", &customerIDNumber);
-	} while (customerIDNumber >= FULL_DIGIT || customerIDNumber < FULL_DIGIT_MIN);
+
+		IDCheck = checkCustomerIDNumber(customerIDNumber);
+
+	} while (!IDCheck);
+
 	return customerIDNumber;
 }
 
-
 int inputOrderCount() {
-	int  orderCount = 1;
+	int  orderCount = 0;
+
 	do {
 		printf("몇개를 주문하시겠습니까? (최대 100개).\n");
+
 		scanf("%d", &orderCount);
+
+		flushInputBuffer();
 	} while (orderCount < MIN_COUNT || orderCount > MAX_COUNT);
 
 	return orderCount;
@@ -69,6 +162,7 @@ int inputOrderCount() {
 
 int inputDiscountSelect() {
 	int  discountSelect;
+
 	do {
 		printf("우대사항을 선택하세요.\n");
 		printf("1. 없음(나이 우대는 자동처리)\n");
@@ -76,29 +170,64 @@ int inputDiscountSelect() {
 		printf("3. 국가유공자\n");
 		printf("4. 다자녀\n");
 		printf("5. 임산부\n");
+
 		scanf("%d", &discountSelect);
 
+		flushInputBuffer();
 	} while (discountSelect < 1 || discountSelect > 5);
+
 	return discountSelect;
 }
 
 
+int inputOrderContinue() {
+	int  continueSelect;
 
-void inputData(int* ticketSelect, long long int* customerIDNumber, int* orderCount, int* discountSelect) {
-	*ticketSelect = inputTicketSelect();
-	*customerIDNumber = inputCustomerIDNumber();
-	*orderCount = inputOrderCount();
-	*discountSelect = inputDiscountSelect();
+	do {
+		printf("계속 발권 하시겠습니까?\n");
+		printf("1. 티켓 발권\n");
+		printf("2. 종료\n");
+		scanf("%d", &continueSelect);
+
+	} while (continueSelect < 1 || continueSelect > 2);
+
+	return continueSelect;
+}
+
+int inputExitSelect() {
+	int isExit;
+
+	do {
+		printf("계속 진행(1:새로운 주문, 2: 프로그램 종료) : ");
+
+		scanf("%d", &isExit);
+
+		flushInputBuffer();
+	} while (isExit < 1 || isExit >2);
+
+	return isExit;
+}
+
+
+int calcPriceAll(long long int customerIDNumber, int ticketSelect, int discountSelect, int orderCount, int priceResult, int* age) {
+	int calcPrice = 0;
+
+	*age = calcAge(customerIDNumber);
+	calcPrice = calcPriceProcess(*age, ticketSelect);
+	calcPrice = calcDiscount(calcPrice, discountSelect);
+	priceResult = calcPriceResult(calcPrice, orderCount);
+
+	return priceResult;
 }
 
 int calcAge(long long int customerIDNumber) {
 	struct tm* t;
+	int age = 0, customerYear = 0, currentYear = 0, birth = 0;
+	int gender = (int)((customerIDNumber / SEVEN_DIGIT) % ONE_DIGIT);
+	
 	time_t now = time(NULL);
 	t = localtime(&now);
 
-	int age = 0;
-	int customerYear = 0;
-	int gender = (int)((customerIDNumber / SEVEN_DIGIT) % ONE_DIGIT);
 	switch (gender) {
 	case KOREAN_MALE_OLD:
 	case KOREAN_FEMALE_OLD:
@@ -111,9 +240,10 @@ int calcAge(long long int customerIDNumber) {
 	default: break;
 	}
 
-	int currentYear = OLD_GENERATION + t->tm_year;
+	currentYear = OLD_GENERATION + t->tm_year;
 	age = currentYear - customerYear + 1;	// 한국식 나이
-	int birth = (int)((customerIDNumber % (FULL_DIGIT_MIN * TWO_DIGIT)) / (SEVEN_DIGIT * ONE_DIGIT));
+	birth = (int)((customerIDNumber % (FULL_DIGIT_MIN * TWO_DIGIT)) / (SEVEN_DIGIT * ONE_DIGIT));
+
 	if (birth > (t->tm_mon + 1) * 100 + t->tm_mday) {
 		age -= BEFORE_BIRTH;
 	}
@@ -152,6 +282,7 @@ int calAgeGroup(int age) {
 int calcPriceProcess(int age, int ticketSelect) {
 	int ageNumber = calAgeGroup(age);
 	int price = 0;
+
 	switch (ticketSelect) {
 	case 1:
 		switch (ageNumber) {
@@ -197,19 +328,7 @@ int calcPriceResult(int calcPrice, int orderCount) {
 	return calcPrice * orderCount;
 }
 
-
-int processIntegeration(long long int customerIDNumber, int ticketSelect, int discountSelect, int orderCount, int priceResult, int* age) {
-	int calcPrice = 0;
-	*age = calcAge(customerIDNumber);
-
-	calcPrice = calcPriceProcess(*age, ticketSelect);
-	calcPrice = calcDiscount(calcPrice, discountSelect);
-	priceResult = calcPriceResult(calcPrice, orderCount);
-
-	return priceResult;
-}
-
-void saveOrderList(int ticketSelect, int age, int orderCount, int priceResult, int discountSelect, int* position, int(*orderList)[5])
+bool saveOrderList(int ticketSelect, int age, int orderCount, int priceResult, int discountSelect, int* position, int(*orderList)[5])
 {
 	orderList[*position][0] = ticketSelect;
 	orderList[*position][1] = age;
@@ -217,16 +336,22 @@ void saveOrderList(int ticketSelect, int age, int orderCount, int priceResult, i
 	orderList[*position][3] = priceResult;
 	orderList[*position][4] = discountSelect;
 	(*position)++;
+
+	return true;
 }
 
-void pricePrint(int priceResult) {
+
+bool printPrice(int priceResult) {
 	printf("가격은 %d 원 입니다.\n", priceResult);
 	printf("감사합니다.\n\n");
+
+	return true;
 }
 
-void orderPrint(int totalPrice, int* position, int(*orderList)[5]) {
-
+bool printOrder(int totalPrice, int* position, int(*orderList)[5]) {
+	printf("티켓 발권을 종료합니다. 감사합니다.\n\n");
 	printf("================================= 롯데월드 =================================\n");
+
 	for (int i = 0;i < *position;i++) {
 		switch (orderList[i][0]) {
 		case 1: printf("| 주간권 |"); break;
@@ -256,25 +381,18 @@ void orderPrint(int totalPrice, int* position, int(*orderList)[5]) {
 		default: break;
 		}
 	}
+
 	printf("\n입장료 총액은 %d원 입니다.\n", totalPrice);
 	printf("============================================================================\n");
+
+	return true;
 }
 
-int orderContinue() {
-	int  continueSelect;
-	do {
-		printf("계속 발권 하시겠습니까?\n");
-		printf("1. 티켓 발권\n");
-		printf("2. 종료\n");
-		scanf("%d", &continueSelect);
-
-	} while (continueSelect < 1 || continueSelect > 2);
-	return continueSelect;
-}
-
-
-bool orderFilePrint(int totalPrice, int* position, int(*orderList)[5], int* filePosition) {
+bool saveOrderIntoFile(int totalPrice, int* position, int(*orderList)[5], int* filePosition) {
 	FILE* fp;
+	struct tm* t;
+	time_t now = time(NULL);
+	t = localtime(&now);
 
 	fp = fopen("report.csv", "r");
 	if (fp == NULL) { // 파일이 없는 경우
@@ -295,11 +413,6 @@ bool orderFilePrint(int totalPrice, int* position, int(*orderList)[5], int* file
 		printf("파일을 열 수 없습니다.");
 		return false;
 	}
-
-	struct tm* t;
-	time_t now = time(NULL);
-	t = localtime(&now);
-
 
 	fprintf(fp, "%d,", ((t->tm_year + OLD_GENERATION) * 10000) + ((t->tm_mon + 1) * 100) + (t->tm_mday));
 	switch (orderList[*position - 1][0]) {
@@ -333,51 +446,33 @@ bool orderFilePrint(int totalPrice, int* position, int(*orderList)[5], int* file
 	return true;
 }
 
-void errorMessagePrint() {
+void printErrorMessage() {
 	printf("에러가 발생하였습니다.\n");
 }
 
-int main() {
+// 필요없는 문자 제거
+void flushInputBuffer() {
+	int c;
+	while ((c = getchar()) != '\n' && c != EOF);
+}
 
-	int totalPrice = 0;
-	int position = 0;
-	int filePosition = 0;
-	int reportPosition = 0;
-	int orderList[100][5] = { 0 };
-	int isExit = 0;
-	bool error=true;
-	struct tm* t;
-	time_t now = time(NULL);
-	t = localtime(&now);
+// 주민등록번호 확인
+bool checkCustomerIDNumber(long long int customerIDNumber) {
+	char customerIDString[14];
+	char gender = customerIDString[6];
 
-	do {
-		while (1) {
-			int ticketSelect, orderCount, discountSelect, age, price = 0;
-			long long int customerIDNumber;
-			inputData(&ticketSelect, &customerIDNumber, &orderCount, &discountSelect);
+	flushInputBuffer();
+	sprintf(customerIDString, "%lld", customerIDNumber);
 
-			price = processIntegeration(customerIDNumber, ticketSelect, discountSelect, orderCount, price, &age);
-			pricePrint(price);
-			totalPrice += price;
+	if (strlen(customerIDString) != 13) {
+		printf("주민등록번호의 형식이 올바르지 않습니다.\n");
+		return false;
+	}
 
-			saveOrderList(ticketSelect, age, orderCount, price, discountSelect, &position, orderList);
+	if (gender == '0' || gender == '9') {
+		printf("주민번호 뒷자리의 첫 번째 숫자를 잘못 입력하였습니다.\n");
+		return false;
+	}
 
-			error = orderFilePrint(totalPrice, &position, orderList, &filePosition);
-			
-
-			if (!error) {errorMessagePrint(); break; }
-
-			int continueSelect = orderContinue();
-			if (continueSelect == 2) { break; }
-		}
-		printf("티켓 발권을 종료합니다. 감사합니다.\n\n");
-		orderPrint(totalPrice, &position, orderList);
-
-		printf("계속 진행(1:새로운 주문, 2: 프로그램 종료) : ");
-		scanf("%d", &isExit);
-		position = 0;
-		totalPrice = 0;
-	} while (isExit == 1);
-
-	return 0;
+	return true;
 }
